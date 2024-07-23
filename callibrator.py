@@ -242,4 +242,4 @@ class Callibrator(object):
                 cv2.imwrite(f'{save_dir}/{img_name}', undistorted_img)
             print(f'Undistorted image saved in {save_dir}')
 
-        return undistorted_imgs
+        return [dict["img"] for dict in undistorted_imgs]
