@@ -46,5 +46,7 @@ python main.py -l <calibration_file_path> -i <input_directory> -o <output_direct
 - `-i` or `--input_dir`: Directory of the images to be undistorted.
 - `-o` or `--output_dir`: Directory where the undistorted images will be saved.
 
+For more details about how the callibration process goes, please refer to `callibrator.py`.
+
 ## References
 - [Calibrate fisheye lens using OpenCV](https://medium.com/@kennethjiang/calibrate-fisheye-lens-using-opencv-333b05afa0b0)
