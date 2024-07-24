@@ -184,6 +184,85 @@ class Callibrator(object):
         self.calibration = calibration
         return calibration
     
+    def recalibrate_pinhole(self, images: Union[list, str], need_distort: bool = False) -> dict:
+        '''
+        Recalibrate the pinhole camera using specified (save_dir(s) to) images.
+
+        Parameters:
+        - images: can be a list or string as
+            - a list of images (MatLike: np.ndarray, cv2.Mat, list, etc)
+            - a list of paths to the images (list)
+            - a string of save_dir to the folder containing all images (str)
+        - need_distort: bool, whether to undistort the images before recalibration using current fisheye intrinsics
+
+        Returns:
+        - mtx, dist: new pinhole intrinsics
+        '''
+        if self.calibration is None:
+            raise ValueError('No calibration data found. Please calibrate first.')
+        
+        mtx, dist = self.get_pin_hole_intrinsics()
+        print(Fore.BLUE + "Original pinhole intrinsics:" + Fore.RESET)
+        print(Fore.BLUE, end="")
+        print("mtx  = np.array(" + str(mtx.tolist()) + ")")
+        print("dist = np.array(" + str(dist.tolist()) + ")")
+        print(Fore.RESET, end="")
+        
+        given_images_list = []
+
+        # hander different types of input
+        if isinstance(images, str):
+            # single save_dir to images
+            image_paths = glob.glob('./images/*.png') + glob.glob('./images/*.jpg')
+            for img_path in image_paths:
+                img = cv2.imread(img_path)
+                given_images_list.append(img)
+        elif isinstance(images, list):
+            if isinstance(images[0], str):
+                # a list of paths to the images
+                for img_path in images:
+                    img = cv2.imread(img_path)
+                    given_images_list.append(img)
+            else:
+                # a list of images
+                given_images_list = images
+        
+        if need_distort:
+            images_list = [self.undistort([img])[0] for img in given_images_list]
+        else:
+            images_list = given_images_list
+
+        flags = cv2.CALIB_CB_ADAPTIVE_THRESH + \
+                cv2.CALIB_CB_FAST_CHECK + \
+                cv2.CALIB_CB_NORMALIZE_IMAGE
+        
+        pinhole_imgpoints = []
+        for img in images_list:
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            ret, corners = cv2.findChessboardCorners(gray, self.CHECKERBOARD, flags)
+            if ret:
+                self.objpoints.append(self.objp)
+                cv2.cornerSubPix(gray, corners, (3, 3), (-1, -1), self.subpix_criteria)
+                pinhole_imgpoints.append(corners)
+        ret, mtx, dist, _, _ =cv2.calibrateCamera(
+            self.objpoints,
+            pinhole_imgpoints,
+            gray.shape[::-1],
+            None,
+            None
+        )
+
+        print(Fore.YELLOW + "Pinhole recalibration results:" + Fore.RESET)
+        print(Fore.YELLOW, end="")
+        print("mtx  = np.array(" + str(mtx.tolist()) + ")")
+        print("dist = np.array(" + str(dist.tolist()) + ")")
+        print(Fore.RESET, end="")
+
+        # save calibration results
+        self.calibration['mtx_pinhole'] = mtx.tolist()
+        self.calibration['dist_pinhole'] = dist.tolist()
+        return mtx, dist
+
     def save_calibration(self, save_path: str = './calibration.json') -> None:
         '''
         Save the calibration results into a json file
@@ -237,7 +316,7 @@ class Callibrator(object):
         mtx = np.array(self.calibration['mtx_pinhole'])
         dist = np.array(self.calibration['dist_pinhole'])
         return mtx, dist
-
+    
     def undistort(
             self,
             images: Union[list, str],
