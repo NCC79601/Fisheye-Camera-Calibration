@@ -91,15 +91,20 @@ class Callibrator(object):
 
         # get image points
         print("Finding chessboard corners...")
+
+        flags = cv2.CALIB_CB_ADAPTIVE_THRESH + \
+                cv2.CALIB_CB_FAST_CHECK + \
+                cv2.CALIB_CB_NORMALIZE_IMAGE
+        
+        # find the chess board corners
         for img in images_list:
             if _img_shape is None:
                 _img_shape = img.shape[:2]
             else:
                 assert _img_shape == img.shape[:2], "All images must share the same size."
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            # Find the chess board corners
-            ret, corners = cv2.findChessboardCorners(gray, self.CHECKERBOARD, cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_FAST_CHECK + cv2.CALIB_CB_NORMALIZE_IMAGE)
-            # If found, add object points, image points (after refining them)
+            ret, corners = cv2.findChessboardCorners(gray, self.CHECKERBOARD, flags)
+            # if found, add object points, image points (after refining them)
             if ret:
                 self.objpoints.append(self.objp)
                 cv2.cornerSubPix(gray, corners, (3, 3), (-1, -1), self.subpix_criteria)
@@ -113,6 +118,7 @@ class Callibrator(object):
 
         # calibrate
         print("Running calibration...")
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 1e-6)
         rms, _, _, _, _ = cv2.fisheye.calibrate(
             self.objpoints,
             imgpoints,
@@ -122,22 +128,58 @@ class Callibrator(object):
             rvecs,
             tvecs,
             self.calibration_flags,
-            (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 1e-6)
+            criteria
         )
 
         print("Found " + str(N_OK) + " valid images for calibration")
-        print(Fore.BLUE + "Calibration results:" + Fore.RESET)
+        print(Fore.BLUE + "Fisheye calibration results:" + Fore.RESET)
         print(Fore.BLUE, end="")
         print("DIM = " + str(_img_shape[::-1]))
         print("K = np.array(" + str(K.tolist()) + ")")
         print("D = np.array(" + str(D.tolist()) + ")")
         print(Fore.RESET, end="")
 
+        # calibrate undistorted pinhole camera intrinsics
+        print('Calibrating undistorted pinhole camera intrinsics...')
+
+        # clear objpoints
+        self.objpoints = []
+        
+        # undistort images
+        pihole_images_list = []
+        for img in images_list:
+            undistorted_img = cv2.fisheye.undistortImage(img, K, D, Knew=K)
+            pihole_images_list.append(undistorted_img)
+        
+        # same as above (fisheye)
+        pinhole_imgpoints = []
+        for img in pihole_images_list:
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            ret, corners = cv2.findChessboardCorners(gray, self.CHECKERBOARD, flags)
+            if ret:
+                self.objpoints.append(self.objp)
+                cv2.cornerSubPix(gray, corners, (3, 3), (-1, -1), self.subpix_criteria)
+                pinhole_imgpoints.append(corners)
+        ret, mtx, dist, _, _ =cv2.calibrateCamera(
+            self.objpoints,
+            pinhole_imgpoints,
+            gray.shape[::-1],
+            None,
+            None
+        )
+        print(Fore.BLUE + "Pin hole calibration results:" + Fore.RESET)
+        print(Fore.BLUE, end="")
+        print("mtx  = np.array(" + str(mtx.tolist()) + ")")
+        print("dist = np.array(" + str(dist.tolist()) + ")")
+        print(Fore.RESET, end="")
+
         # save calibration results
         calibration = {
             'DIM': _img_shape[::-1],
             'K': K.tolist(),
-            'D': D.tolist()
+            'D': D.tolist(),
+            'mtx_pinhole':  mtx.tolist(),
+            'dist_pinhole': dist.tolist()
         }
         self.calibration = calibration
         return calibration
@@ -154,7 +196,7 @@ class Callibrator(object):
         with open(save_path, 'w') as f:
             json.dump(self.calibration, f, indent=4)
         print(f'Results saved in {save_path}')
-    
+
     def load_calibration(self, calibration_path: str = './calibration.json') -> dict:
         '''
         Load the calibration results from a json file.
@@ -169,6 +211,32 @@ class Callibrator(object):
             calibration = json.load(f)
         self.calibration = calibration
         return calibration
+
+    def get_intrinsics(self):
+        '''
+        Get the intrinsics from the fisheye intrinsics.
+
+        Returns:
+        - intrinsics: fisheye intrinsics, K and D
+        '''
+        if self.calibration is None:
+            raise ValueError('No calibration data found. Please calibrate first.')
+        K = np.array(self.calibration['K'])
+        D = np.array(self.calibration['D'])
+        return K, D
+
+    def get_pin_hole_intrinsics(self):
+        '''
+        Get the pin hole intrinsics from the fisheye intrinsics.
+
+        Returns:
+        - intrinsics: pin hole intrinsics, mtx and dist
+        '''
+        if self.calibration is None:
+            raise ValueError('No calibration data found. Please calibrate first.')
+        mtx = np.array(self.calibration['mtx_pinhole'])
+        dist = np.array(self.calibration['dist_pinhole'])
+        return mtx, dist
 
     def undistort(
             self,
