@@ -9,34 +9,38 @@ import json
 from callibrator import Callibrator
 from vector_plotter import VectorPlotter
 
-callibrator = Callibrator()
-callibrator.load_calibration()
-
-mtx, dist = callibrator.get_pin_hole_intrinsics()
-
-print(f'Pinhole intrinsics:')
-print(f'mtx:  {mtx}')
-print(f'dist: {dist}')
-
-# load aruco tags config
-with open('./aruco_tag_config.json', 'r') as f:
-    aruco_config = json.load(f)
-
-tags = aruco_config['tags']
-tag_pos  = {}
-tag_norm = {}
-for tag in tags:
-    tag_pos[tag['id']]  = np.array(tag['pos'])
-    tag_norm[tag['id']] = np.array(tag['norm'])
-
-print('Initializing camera pose plotter...')
-plotter = VectorPlotter()
-
-time.sleep(1)
+R_x_90 = cv2.Rodrigues(np.pi/2 * np.array([1, 0, 0]))[0]
+mirror_x = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, 1]])
+tvec_threshold = 5.0
 
 def main():
+    callibrator = Callibrator()
+    callibrator.load_calibration()
+
+    mtx, dist = callibrator.get_pin_hole_intrinsics()
+
+    print(f'Pinhole intrinsics:')
+    print(f'mtx:  {mtx}')
+    print(f'dist: {dist}')
+
+    # load aruco tags config
+    with open('./aruco_tag_config.json', 'r') as f:
+        aruco_config = json.load(f)
+
+    tags = aruco_config['tags']
+    tag_pos_dict  = {}
+    tag_norm_dict = {}
+    for tag in tags:
+        tag_pos_dict[tag['id']]  = np.array(tag['pos'])
+        tag_norm_dict[tag['id']] = np.array(tag['norm'])
+
+    print('Initializing camera pose plotter...')
+    plotter = VectorPlotter()
+
+    time.sleep(1)
+
     # initialize the camera
-    cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture(0)
 
     while True:
         # read image
@@ -61,11 +65,9 @@ def main():
         frame = aruco.drawDetectedMarkers(frame, corners, ids)
 
         rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corners, 0.2, mtx, dist)
-        tag_tvec_dict = {}
-        tag_rvec_dict = {}
+        tag_pose_dict = {}
 
         tags_of_interest = [tag['id'] for tag in tags]
-        print(f'tags of interest: {tags_of_interest}')
         print(f'detected ids: {ids}')
 
         # if markers detected, mark them in the image
@@ -73,44 +75,69 @@ def main():
             for i, id in enumerate(ids):
                 id = id[0]
                 if id in tags_of_interest:
-                    tag_rvec_dict[id] = rvec[i, 0, (0,1,2)]
-                    tag_tvec_dict[id] = tvec[i, 0, (0,1,2)]
+                    tag_pose_dict[id] = {
+                        "tvec": tvec[i, 0, (0,1,2)],
+                        "rvec": rvec[i, 0, (0,1,2)],
+                        "tag_pos":  tag_pos_dict[id],
+                        "tag_norm": tag_norm_dict[id]
+                    }
                     # test output for tag #2
-                    if id == 2:
-                        print(f'tag #2: rvec: {rvec[i, 0, :]} tvec: {tvec[i, 0, :]}')
                     frame = cv2.drawFrameAxes(frame, mtx, dist, rvec[i, :, :], tvec[i, :, :], 0.03)
 
         # calculate camera pose
-        cam_tvec_list = []
-        cam_rvec_list = []
-
-        R_x_90 = cv2.Rodrigues(np.pi/2 * np.array([1, 0, 0]))[0]
+        tvec_w2c_list = []
+        rvec_c2w_list = []
 
         if ids is not None:
             for id in ids:
                 id = id[0]
                 if id in tags_of_interest:
-                    tvec = tag_tvec_dict[id]
-                    rvec = tag_rvec_dict[id]
-                    R, _ = cv2.Rodrigues(rvec)
-                    tvec_r = - R.T @ (tvec)
-                    cam_tvec_list.append(tvec_r)
-                    cam_rvec_list.append(rvec)
+                    print(f'{Fore.GREEN}Tag {id} detected in current frame:{Fore.RESET}')
+                    pose = tag_pose_dict[id]
+                    tvec = pose['tvec'] # from camera to tag (in cam coord)
+                    rvec = pose['rvec']
+
+                    tag_pos  = pose['tag_pos']
+                    tag_norm = pose['tag_norm']
+                    tag_norm = tag_norm / np.linalg.norm(tag_norm)
+
+                    k = np.array([0, 0, 1], dtype=float)
+                    eps = 1e-6
+                    if np.linalg.norm(np.cross(k, tag_norm)) <= eps:
+                        rvec_w2tag = np.array([0, 0, 0], dtype=float)
+                    else:
+                        theta = np.arccos(np.dot(k, tag_norm))
+                        rvec_w2tag = theta * np.cross(k, tag_norm) \
+                                     / np.linalg.norm(np.cross(k, tag_norm))
+                    R_c2tag = cv2.Rodrigues(rvec)[0] @ R_x_90.T # checked
+                    R_tag2c = R_c2tag.T # checked
+                    R_w2tag = cv2.Rodrigues(rvec_w2tag)[0] # checked
+                    R_w2c = (R_tag2c @ R_w2tag)
+                    R_c2w = R_w2c.T
+                    rvec_c2w = cv2.Rodrigues(R_c2w)[0]
+                    
+                    tvec_tag2c = R_x_90.T @ tvec
+                    tvec_w2c = - R_c2w.T @ (tvec_tag2c) + tag_pos
+
+                    if np.linalg.norm(tvec_w2c) < tvec_threshold:
+                        tvec_w2c_list.append(tvec_w2c)
+                        rvec_c2w_list.append(rvec_c2w)
+                    else:
+                        print(f'{Fore.BLUE}Ignore tag {id}.{Fore.RESET}')
         
         # broute force: average the tvec and rvec
         # TODO: maybe use mean squared error to find the best pose?
-        if len(cam_tvec_list):
-            cam_pos  = np.mean(cam_tvec_list, axis=0)
-            cam_rvec = np.mean(cam_rvec_list, axis=0)
-            cam_R = cv2.Rodrigues(cam_rvec)[0]
-            cam_R = R_x_90.T @ cam_R
-            cam_right = cam_R[0, :]
-            cam_front = cam_R[1, :]
-            cam_up    = cam_R[2, :]
+        if len(tvec_w2c_list):
+            tvec_w2c_avg  = np.mean(tvec_w2c_list, axis=0)
+            rvec_w2c_avg = np.mean(rvec_c2w_list, axis=0)
+            R_w2c = cv2.Rodrigues(rvec_w2c_avg)[0]
+            cam_right = R_w2c[0, :]
+            cam_front = R_w2c[1, :]
+            cam_up    = R_w2c[2, :]
 
             print(f'{Fore.GREEN}Camera pose of current frame:{Fore.RESET}')
             print(f' > Camera position:')
-            print(f'     pos:   {cam_pos}')
+            print(f'     pos:   {tvec_w2c_avg}')
             print(f' > Camera orientation:')
             print(f'     right: {cam_right}')
             print(f'     front: {cam_front}')
@@ -118,7 +145,7 @@ def main():
 
             plotter.update_vectors(
                 [cam_right, cam_front, cam_up],
-                cam_pos
+                tvec_w2c_avg
             )
 
         else:
