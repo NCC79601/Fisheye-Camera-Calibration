@@ -12,7 +12,6 @@ from vector_plotter import VectorPlotter
 callibrator = Callibrator()
 callibrator.load_calibration()
 
-K, D = callibrator.get_intrinsics()
 mtx, dist = callibrator.get_pin_hole_intrinsics()
 
 print(f'Pinhole intrinsics:')
