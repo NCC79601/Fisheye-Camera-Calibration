@@ -8,29 +8,35 @@ import time
 import json
 from callibrator import Callibrator
 from vector_plotter import VectorPlotter
+from scipy.spatial.transform import Rotation
 
-
-from moveit_comm.client import ClientSocket
-client = ClientSocket()
-
-
+# %% define constant rotations
 R_x_90 = cv2.Rodrigues(np.pi/2 * np.array([1, 0, 0]))[0]
-R_y_90 = cv2.Rodrigues(np.pi/2 * np.array([0, 1, 0]))[0]
-R_z_90 = cv2.Rodrigues(np.pi/2 * np.array([0, 0, 1]))[0]
 R_xy_180 = cv2.Rodrigues(np.pi * np.array([1, 1, 0]) / np.sqrt(2))[0]
-mirror_x = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, 1]])
-tvec_threshold = 5.0
 
-markersX = 4
-markersY = 5
-markerLength = 35 # mm
-markerSeparation = 15  # mm
-dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
+# %% load configs
+aruco_board_config_path = os.path.join(os.path.dirname(__file__), 'configs/aruco_board_config.json')
+with open(aruco_board_config_path, 'r') as f:
+    aruco_board_config = json.load(f)
+
+markersX = aruco_board_config['markersX']
+markersY = aruco_board_config['markersY']
+markerLength = aruco_board_config['markerLength_mm'] # unit: mm
+markerSeparation = aruco_board_config['markerSeparation_mm'] # unit: mm
+dict_name = aruco_board_config['aruco_dictionary']
+dictionary = cv2.aruco.getPredefinedDictionary(eval(f'cv2.aruco.{dict_name}'))
 board = cv2.aruco.GridBoard((markersX, markersY), float(markerLength), float(markerSeparation), dictionary)
 
-board_norm = np.array([0, 0, 1])
-board_pos  = np.array([0, 0, 0])
+board_pos  = np.array(aruco_board_config["board_pos"])
+board_norm = np.array(aruco_board_config["board_norm"])
 
+# %% communication related
+enable_comm = bool(aruco_board_config['enable_comm'])
+from moveit_comm.client import ClientSocket
+if enable_comm:
+    client = ClientSocket()
+
+# %% main function
 def main():
     callibrator = Callibrator()
     callibrator.load_calibration()
@@ -41,24 +47,14 @@ def main():
     print(f'mtx:  {mtx}')
     print(f'dist: {dist}')
 
-    # load aruco tags config
-    with open('./aruco_tag_config.json', 'r') as f:
-        aruco_config = json.load(f)
-
-    tags = aruco_config['tags']
-    tag_pos_dict  = {}
-    tag_norm_dict = {}
-    for tag in tags:
-        tag_pos_dict[tag['id']]  = np.array(tag['pos'])
-        tag_norm_dict[tag['id']] = np.array(tag['norm'])
-
     print('Initializing camera pose plotter...')
     plotter = VectorPlotter()
 
     time.sleep(1)
 
     # initialize the camera
-    cap = cv2.VideoCapture(1)
+    camera_id = aruco_board_config['camera_id']
+    cap = cv2.VideoCapture(camera_id)
 
     while True:
         # read image
@@ -139,18 +135,21 @@ def main():
             )
 
             rvec_w2c = cv2.Rodrigues(R_w2c)[0].astype(np.float64).flatten()
+            rotation = Rotation.from_rotvec(rvec_w2c)
+            euler_angles = rotation.as_euler('xyz', degrees=False)
 
             pose = np.array([
                 tvec_w2c[0],
                 tvec_w2c[1],
                 tvec_w2c[2],
-                rvec_w2c[0],
-                rvec_w2c[1],
-                rvec_w2c[2],
+                euler_angles[0],
+                euler_angles[1],
+                euler_angles[2],
             ], dtype=np.float64)
             print(f'{Fore.YELLOW}Sending pose to server...{Fore.RESET}')
             print(f' > pose: {pose}')
-            client.cli_send(pose)
+            if enable_comm:
+                client.cli_send(pose)
         
         else:
             print(f'{Fore.RED}No tag detected in current frame.{Fore.RESET}')

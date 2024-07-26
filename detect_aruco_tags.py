@@ -24,6 +24,7 @@ def main():
     print(f'dist: {dist}')
 
     # load aruco tags config
+    aruco_config_path = os.path.join(os.path.dirname(__file__), 'aruco_tag_config.json')
     with open('./aruco_tag_config.json', 'r') as f:
         aruco_config = json.load(f)
 
