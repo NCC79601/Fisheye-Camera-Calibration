@@ -40,7 +40,7 @@ def main():
     time.sleep(1)
 
     # initialize the camera
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
 
     while True:
         # read image
