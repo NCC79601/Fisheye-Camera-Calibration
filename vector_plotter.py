@@ -16,7 +16,7 @@ class VectorPlotter:
         plt.ion()
         plt.show()
 
-    def draw_vectors(self):
+    def draw_vectors(self, axis_lim=[-3, 3], scale=1.0):
         plt.clf()  # 清除当前图形
         fig = plt.gcf()  # 获取当前图形
         # 检查是否已经有轴存在，并获取当前的视角
@@ -30,7 +30,7 @@ class VectorPlotter:
             self.ax.view_init(elev=elev, azim=azim)
         color_list = ['r', 'g', 'b', 'c', 'm', 'y']
         for i in range(len(self.vector_list)):
-            vector = self.vector_list[i]
+            vector = np.array(self.vector_list[i]) * scale
             self.ax.quiver(
                 self.origin[0],
                 self.origin[1],
@@ -40,19 +40,19 @@ class VectorPlotter:
                 vector[2],
                 color=color_list[i % 6]
             )  # 绘制向量
-        self.ax.set_xlim([-3, 3])
-        self.ax.set_ylim([-3, 3])
-        self.ax.set_zlim([-3, 3])
+        self.ax.set_xlim(axis_lim)
+        self.ax.set_ylim(axis_lim)
+        self.ax.set_zlim(axis_lim)
         self.ax.set_xlabel('x')
         self.ax.set_ylabel('y')
         self.ax.set_zlabel('z')
         # plt.ioff()
 
-    def update_vectors(self, new_vectors, new_origin = None):
+    def update_vectors(self, new_vectors, new_origin = None, axis_lim=[-3, 3], scale=1.0):
         if new_origin is not None:
             self.origin = np.array(new_origin)
         self.vector_list = new_vectors
-        self.draw_vectors()
+        self.draw_vectors(axis_lim, scale)
 
 
 if __name__ == '__main__':
