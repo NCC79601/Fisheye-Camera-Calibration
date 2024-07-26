@@ -4,6 +4,7 @@ import time
 
 server_ip = "127.0.0.1"
 server_port = 60123
+# TODO: move configs to json file
 
 class ClientSocket():
     def __init__(self) -> None:
