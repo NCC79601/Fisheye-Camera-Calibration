@@ -9,6 +9,11 @@ import json
 from callibrator import Callibrator
 from vector_plotter import VectorPlotter
 
+
+from moveit_comm.client import ClientSocket
+client = ClientSocket()
+
+
 R_x_90 = cv2.Rodrigues(np.pi/2 * np.array([1, 0, 0]))[0]
 R_y_90 = cv2.Rodrigues(np.pi/2 * np.array([0, 1, 0]))[0]
 R_z_90 = cv2.Rodrigues(np.pi/2 * np.array([0, 0, 1]))[0]
@@ -132,6 +137,20 @@ def main():
                 axis_lim=[-1000, 1000],
                 scale=300.0
             )
+
+            rvec_w2c = cv2.Rodrigues(R_w2c)[0].astype(np.float64).flatten()
+
+            pose = np.array([
+                tvec_w2c[0],
+                tvec_w2c[1],
+                tvec_w2c[2],
+                rvec_w2c[0],
+                rvec_w2c[1],
+                rvec_w2c[2],
+            ], dtype=np.float64)
+            print(f'{Fore.YELLOW}Sending pose to server...{Fore.RESET}')
+            print(f' > pose: {pose}')
+            client.cli_send(pose)
         
         else:
             print(f'{Fore.RED}No tag detected in current frame.{Fore.RESET}')
