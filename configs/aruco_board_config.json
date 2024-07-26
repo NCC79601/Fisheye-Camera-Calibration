@@ -1,0 +1,15 @@
+{
+    "markersX": 4,
+    "markersY": 5,
+    "markerLength_mm": 35,
+    "markerSeparation_mm": 15,
+
+    "board_pos": [0, 0, 0],
+    "board_norm": [0, 0, 1],
+
+    "aruco_dictionary": "DICT_6X6_250",
+
+    "enable_comm": false,
+
+    "camera_id": 1
+}
