@@ -20,7 +20,8 @@ class ClientSocket():
     def cli_send(self, pose):
         # pose is a 6darray with type float64
         # pose = np.array([0.3, 0.3, 0.3, 0, 0, 0, 1], dtype=np.float64)
-        pose = np.array(pose, dtype=np.float64)
+        pose = np.array(pose, dtype=np.float64).reshape(-1)
+        # print(f'pose shape: {pose.shape}')
         pose = pose.tobytes()
         self.client.sendall(pose)
         # time.sleep(0.1)

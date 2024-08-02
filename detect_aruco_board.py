@@ -12,6 +12,7 @@ from scipy.spatial.transform import Rotation
 
 # %% define constant rotations
 R_x_90 = cv2.Rodrigues(np.pi/2 * np.array([1, 0, 0]))[0]
+R_y_90 = cv2.Rodrigues(np.pi/2 * np.array([0, 1, 0]))[0]
 R_xy_180 = cv2.Rodrigues(np.pi * np.array([1, 1, 0]) / np.sqrt(2))[0]
 
 # %% load configs
@@ -56,6 +57,9 @@ def main():
     camera_id = aruco_board_config['camera_id']
     cap = cv2.VideoCapture(camera_id)
 
+    # list of poses to send to server
+    poses = []
+
     while True:
         # read image
         ret, frame = cap.read()
@@ -79,7 +83,7 @@ def main():
         frame = aruco.drawDetectedMarkers(frame, corners, ids)
 
         if (len(corners) > 0) and (len(ids) > 0):
-            print(f'{Fore.GREEN}Detected ids: {ids}{Fore.RESET}')
+            # print(f'{Fore.GREEN}Detected ids: {ids}{Fore.RESET}')
             rvec = np.zeros((len(ids), 3))
             tvec = np.zeros((len(ids), 3))
 
@@ -113,7 +117,7 @@ def main():
             R_w2c = R_c2w.T
             
             tvec_tag2c = R_x_90.T @ tvec[:, 0]
-            tvec_w2c = - R_c2w @ (tvec_tag2c) + board_pos
+            tvec_c2w = - R_c2w @ (tvec_tag2c) + board_pos
 
             cam_right = R_w2c[0, :]
             cam_front = R_w2c[1, :]
@@ -121,35 +125,52 @@ def main():
 
             print(f'{Fore.GREEN}Camera pose of current frame:{Fore.RESET}')
             print(f' > Camera position:')
-            print(f'     pos:   {tvec_w2c}')
+            print(f'     pos:   {tvec_c2w}')
             print(f' > Camera orientation:')
             print(f'     right: {cam_right}')
             print(f'     front: {cam_front}')
             print(f'     up:    {cam_up}')
 
-            plotter.update_vectors(
-                [cam_right, cam_front, cam_up],
-                tvec_w2c,
-                axis_lim=[-1000, 1000],
-                scale=300.0
-            )
-
-            rvec_w2c = cv2.Rodrigues(R_w2c)[0].astype(np.float64).flatten()
-            rotation = Rotation.from_rotvec(rvec_w2c)
+            R_g2c = R_x_90.T
+            R_g2w = R_c2w @ R_g2c
+            gripper_forward = R_g2w @ np.array([0, 0, 1])
+            gripper_pos = tvec_c2w + np.array([0, 0, 0], dtype=float)
+            rvec_g2w = cv2.Rodrigues(R_g2w)[0].astype(np.float64).flatten()
+            rotation = Rotation.from_rotvec(rvec_g2w)
             euler_angles = rotation.as_euler('xyz', degrees=False)
 
             pose = np.array([
-                tvec_w2c[0],
-                tvec_w2c[1],
-                tvec_w2c[2],
+                gripper_pos[0],
+                gripper_pos[1],
+                gripper_pos[2],
                 euler_angles[0],
                 euler_angles[1],
                 euler_angles[2],
             ], dtype=np.float64)
-            print(f'{Fore.YELLOW}Sending pose to server...{Fore.RESET}')
             print(f' > pose: {pose}')
+
+            # maintain the pose list
+            # if len(poses) < 50:
+            #     poses.append(pose)
+            #     print(f' > Adding pose to list... length = {len(poses)}')
+            # else:
+            #     print(' > Replacing the oldest pose in list...')
+            #     poses.pop(0)
+            #     poses.append(pose)
+            #     if enable_comm:
+            #         print(f'{Fore.YELLOW}Sending pose to server...{Fore.RESET}')
+            #         client.cli_send(poses)
+
             if enable_comm:
+                print(f'{Fore.YELLOW}Sending pose to server...{Fore.RESET}')
                 client.cli_send(pose)
+
+            plotter.update_vectors(
+                [cam_right, cam_front, cam_up, gripper_forward],
+                tvec_c2w,
+                axis_lim=[-1000, 1000],
+                scale=300.0
+            )
         
         else:
             print(f'{Fore.RED}No tag detected in current frame.{Fore.RESET}')

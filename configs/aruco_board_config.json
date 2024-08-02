@@ -9,7 +9,7 @@
 
     "aruco_dictionary": "DICT_6X6_250",
 
-    "enable_comm": false,
+    "enable_comm": true,
 
     "camera_id": 1
 }
