@@ -13,6 +13,7 @@ from scipy.spatial.transform import Rotation
 # %% define constant rotations
 R_x_90 = cv2.Rodrigues(np.pi/2 * np.array([1, 0, 0]))[0]
 R_y_90 = cv2.Rodrigues(np.pi/2 * np.array([0, 1, 0]))[0]
+R_z_180 = cv2.Rodrigues(np.pi  * np.array([0, 0, 1]))[0]
 R_xy_180 = cv2.Rodrigues(np.pi * np.array([1, 1, 0]) / np.sqrt(2))[0]
 
 # %% load configs
@@ -122,13 +123,13 @@ def main():
                 rvec_w2tag = theta * np.cross(k, board_norm) \
                                 / np.linalg.norm(np.cross(k, board_norm)) # checked
             
-            R_c2tag = R_xy_180 @ R.T @ R_x_90
+            R_c2tag = R_xy_180 @ R.T
             R_w2tag = cv2.Rodrigues(rvec_w2tag)[0]
             R_tag2w = R_w2tag.T
             R_c2w = R_tag2w @ R_c2tag
             R_w2c = R_c2w.T
             
-            tvec_tag2c = R_x_90.T @ tvec[:, 0]
+            tvec_tag2c = tvec[:, 0]
             tvec_c2w = - R_c2w @ (tvec_tag2c) + board_pos
 
             cam_right = R_w2c[0, :]
@@ -143,7 +144,7 @@ def main():
             print(f'     front: {cam_front}')
             print(f'     up:    {cam_up}')
 
-            R_g2c = R_x_90.T
+            R_g2c = R_z_180
             R_g2w = R_c2w @ R_g2c
             gripper_forward = R_g2w @ np.array([0, 0, 1])
             gripper_pos = tvec_c2w + np.array([0, 0, 0], dtype=float)
