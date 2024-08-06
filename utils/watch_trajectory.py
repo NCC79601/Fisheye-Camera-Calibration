@@ -7,7 +7,7 @@ import os
 
 # 读取 pickle 文件
 curdir = os.path.normpath(os.path.dirname(__file__))
-file_path = os.path.join(os.path.dirname(curdir), 'saved_trajectory/2024-08-05_12-20-35.pkl')
+file_path = os.path.join(os.path.dirname(curdir), 'saved_trajectory/2024-08-06_10-48-37.pkl')
 print(f'file path: {file_path}')
 
 with open(file_path, 'rb') as file:
@@ -19,6 +19,10 @@ t = [data['t'] for data in trajectory_data]
 x = [data['pose'][0] for data in trajectory_data]
 y = [data['pose'][1] for data in trajectory_data]
 z = [data['pose'][2] for data in trajectory_data]
+
+t_max = max(t)
+fps = len(t) / t_max
+print(f'fps: {fps}')
 
 min_val = min(min(x), min(y), min(z))
 max_val = max(max(x), max(y), max(z))
