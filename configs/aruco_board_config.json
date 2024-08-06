@@ -11,5 +11,8 @@
 
     "enable_comm": true,
 
+    "save_trajectory": true,
+    "save_path": "./saved_trajectory",
+
     "camera_id": 1
 }

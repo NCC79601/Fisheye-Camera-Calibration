@@ -37,6 +37,16 @@ from moveit_comm.client import ClientSocket
 if enable_comm:
     client = ClientSocket()
 
+# %% whether to save the trajectory to a pickle file
+save_trajectory = bool(aruco_board_config['save_trajectory'])
+if save_trajectory:
+    import pickle
+    save_path = aruco_board_config['save_path']
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    save_file = os.path.join(save_path, f'{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.pkl')
+    trajectory = []
+
 # %% main function
 def main():
     callibrator = Callibrator()
@@ -59,6 +69,8 @@ def main():
 
     # list of poses to send to server
     poses = []
+
+    init_time = datetime.now()
 
     while True:
         # read image
@@ -164,6 +176,13 @@ def main():
             if enable_comm:
                 print(f'{Fore.YELLOW}Sending pose to server...{Fore.RESET}')
                 client.cli_send(pose)
+            
+            if save_trajectory:
+                trajectory.append({
+                    't': (datetime.now() - init_time).total_seconds(),
+                    'pose': pose
+                })
+                print(f'{Fore.YELLOW}Adding pose to trajectory...{Fore.RESET}')
 
             plotter.update_vectors(
                 [cam_right, cam_front, cam_up, gripper_forward],
@@ -180,6 +199,12 @@ def main():
 
         key = cv2.waitKey(1)
         if key & 0xFF == ord('q'):
+            print('Quitting...')
+            # save trajectory to pickle file
+            if save_trajectory:
+                print(f'{Fore.YELLOW}Saving trajectory to {save_file}...{Fore.RESET}')
+                with open(save_file, 'wb') as f:
+                    pickle.dump(trajectory, f)
             break
         elif key & 0xFF == ord('s'):
             if not os.path.exists('./capture'):
