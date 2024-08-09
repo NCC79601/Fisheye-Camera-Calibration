@@ -38,6 +38,10 @@ from moveit_comm.client import ClientSocket
 if enable_comm:
     client = ClientSocket()
 
+# %% rotation represent type
+represent_type = aruco_board_config['rotation_represent_type']
+assert represent_type in ["euler", "rot_vec"]
+
 # %% whether to save the trajectory to a pickle file
 save_trajectory = bool(aruco_board_config['save_trajectory'])
 if save_trajectory:
@@ -152,14 +156,13 @@ def main():
             rotation = Rotation.from_rotvec(rvec_g2w)
             euler_angles = rotation.as_euler('xyz', degrees=False)
 
-            pose = np.array([
-                gripper_pos[0],
-                gripper_pos[1],
-                gripper_pos[2],
-                euler_angles[0],
-                euler_angles[1],
-                euler_angles[2],
-            ], dtype=np.float64)
+            pose = np.zeros(6, dtype=np.float64)
+            pose[0:3] = gripper_pos
+            if represent_type == "euler":
+                pose[3:6] = euler_angles
+            elif represent_type == "rot_vec":
+                pose[3:6] = rvec_g2w
+
             print(f' > pose: {pose}')
 
             # maintain the pose list

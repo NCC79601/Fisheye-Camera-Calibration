@@ -4,12 +4,14 @@
     "markerLength_mm": 35,
     "markerSeparation_mm": 15,
 
-    "board_pos": [0, 0, 0],
+    "board_pos": [800, 0, 0],
     "board_norm": [0, 0, 1],
 
     "aruco_dictionary": "DICT_6X6_250",
 
     "enable_comm": true,
+
+    "rotation_represent_type": "rot_vec",
 
     "save_trajectory": true,
     "save_path": "./saved_trajectory",
